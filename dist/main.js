@@ -47,4 +47,9 @@ var creepy = function(creeps) {
     });
 };
 module.exports.loop = function() {
+    return (function() {
+        memory();
+        spawny(Game.spawns);
+        return creepy(Game.creeps);
+    })();
 };

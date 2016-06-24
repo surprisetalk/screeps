@@ -42,8 +42,8 @@
 
 ;;; LOOP ;;;
 
-(set module.exports.loop (function () ))
-    ;; (do
-    ;; 	(memory)
-    ;; 	(spawny Game.spawns)
-    ;; 	(creepy Game.creeps))))
+(set module.exports.loop (function ()
+    (do
+    	(memory)
+    	(spawny Game.spawns)
+    	(creepy Game.creeps))))
