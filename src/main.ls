@@ -22,6 +22,8 @@
 
 ;;; ENVIRONMENT ;;;
 
+(var is_source (function (id) 
+  (_.has (Game.getObjectById id) "energy")))
 
 ;;; CREEP BEHAVIOR ;;;
 
@@ -48,16 +50,18 @@
 (define creep_transfer (creep targets resource)
   (when (&& (> (.length targets) 0) 
 	     (= (-> creep 
-		    (.transfer (choose targets) 
+		    (.transfer (get 0 targets) 
 			       resource)) 
 		ERR_NOT_IN_RANGE))
-    (-> creep (.moveTo (choose targets)))))
+    (-> creep (.moveTo (car targets)))))
 
-(define creep_move_to_resources (creep)
-  (let (sources) ((-> (.room creep) (.find FIND_SOURCES)))
-    (when (= (-> creep (.harvest (choose sources))) 
-	     ERR_NOT_IN_RANGE) 
-      (-> creep (.moveTo (choose sources))))))
+(define creep_move_to_resources (creep dest)
+  (let (source) ((if (is_source (.memory.dest creep)) 
+		     (Game.getObjectById (.memory.dest creep))
+		     (choose (-> (.room creep) (.find FIND_SOURCES)))))
+       (when (= (-> creep (.harvest source)) 
+		ERR_NOT_IN_RANGE) 
+	 (-> creep (.moveTo source)))))
 
 (define creep_upgrade_controller (creep)
   (when (= (-> creep (.upgradeController (.room.controller creep)))
@@ -73,7 +77,7 @@
 (define harvester (creep) 
   (cond
     (is_creep_carry_energy_empty creep) (creep_move_to_resources creep)
-    true (creep_transfer creep (creep_room_find_structures_under_capacity creep) RESOURCE_ENERGY)))
+    true (do (creep_transfer creep (creep_room_find_structures_under_capacity creep) RESOURCE_ENERGY))))
 
 (define builder (creep) (console.log "builder not implemented yet!"))
 
