@@ -1,4 +1,9 @@
 
+;;; FUNCTIONS ;;;
+
+(var random (.random Math))
+(var floor (.floor Math))
+
 ;;; MACROS ;;;
 
 (macro let (names vals rest...)
@@ -9,6 +14,11 @@
 
 (macro car (ls)
     (get 0 ~ls))
+
+(macro choose (ls)
+    (get (floor (* (random) 
+		   (.length ~ls))) 
+	 ~ls))
 
 ;;; ENVIRONMENT ;;;
 
@@ -38,7 +48,7 @@
 (define creep_transfer (creep targets resource)
   (when (and (> (.length targets) 0) 
 	     (= (-> creep 
-		    (.transfer (car targets) 
+		    (.transfer (choose targets) 
 			       resource)) 
 		ERR_NOT_IN_RANGE))
     (-> creep (.moveTo (car targets)))))
