@@ -29,9 +29,9 @@
 
 (define should_create_creep () true)
 
-(define spawny (spawns) 
-  (eachKey spawns (val key)
-    (when (should_create_creep) (creeper val))))
+(define spawny (spawns) true)
+  ;; (eachKey spawns (val key)
+  ;;   (when (should_create_creep) (creeper val))))
 
 ;; TODO: how do we dynamically run the function based on role?
 (define creepy (creeps) true)
