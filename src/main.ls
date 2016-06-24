@@ -15,10 +15,13 @@
 (macro car (ls)
     (get 0 ~ls))
 
-(macro choose (ls)
+;;; HELPERS ;;;
+
+(var choose 
+  (function (ls)
     (get (floor (* (random) 
-		   (.length ~ls))) 
-	 ~ls))
+		   (.length ls))) 
+	 ls)))
 
 ;;; ENVIRONMENT ;;;
 
@@ -35,6 +38,7 @@
   (= (_.sum (.carry creep)) 
      (.carryCapacity creep)))
 
+;; TODO: extensions should take higher priority
 (define creep_room_find_structures_under_capacity (creep)
   (-> creep 
       (.room.find FIND_STRUCTURES 
@@ -47,22 +51,25 @@
 					(< (.energy structure) 
 					   (.energyCapacity structure))))))))
 
+;; TODO: set dest
 (define creep_transfer (creep targets resource)
   (when (&& (> (.length targets) 0) 
-	     (= (-> creep 
-		    (.transfer (get 0 targets) 
-			       resource)) 
-		ERR_NOT_IN_RANGE))
+	    (= (-> creep 
+		   (.transfer (get 0 targets) 
+			      resource)) 
+	       ERR_NOT_IN_RANGE))
     (-> creep (.moveTo (car targets)))))
 
-(define creep_move_to_resources (creep dest)
+(define creep_move_to_resources (creep)
   (let (source) ((if (is_source (.memory.dest creep)) 
 		     (Game.getObjectById (.memory.dest creep))
-		     (choose (-> (.room creep) (.find FIND_SOURCES)))))
-       (when (= (-> creep (.harvest source)) 
-		ERR_NOT_IN_RANGE) 
-	 (-> creep (.moveTo source)))))
+		     (choose (-> creep (.room.find FIND_SOURCES)))))
+       (do (set Game.creeps[ creep.name ].memory.dest source.id)
+	   (when (= (-> creep (.harvest source)) 
+		    ERR_NOT_IN_RANGE) 
+	     (-> creep (.moveTo source))))))
 
+;; TODO: set dest
 (define creep_upgrade_controller (creep)
   (when (= (-> creep (.upgradeController (.room.controller creep)))
 	   ERR_NOT_IN_RANGE)
@@ -96,18 +103,18 @@
 		       (delete (get name Memory.creeps))))))
 
 (define creepier (spawn)
-  (-> spawn
-      (choose 
-       (array
-	(.createCreep [WORK,CARRY,MOVE] undefined {role: 'harvester'})
-	(.createCreep [WORK,CARRY,MOVE] undefined {role: 'updater'})))))
+  (choose 
+   (array
+    (-> spawn (.createCreep [WORK,CARRY,MOVE] undefined {role: 'harvester'}))
+    (-> spawn (.createCreep [WORK,CARRY,MOVE] undefined {role: 'updater'})))))
 
-(define should_create_creep () false)
+(define should_create_creep (creeps) 
+  (< (.length (Object.keys creeps)) 4))
 
-(define spawny (spawns)
+(define spawny (spawns creeps)
   (eachKey spawns 
     (function (spawn name) 
-      (when (should_create_creep) (creepier spawn)))))
+      (when (should_create_creep creeps) (creepier spawn)))))
 
 (define creepy (creeps)
   (eachKey creeps 
@@ -125,5 +132,5 @@
 (set module.exports.loop (function ()
     (do
     	(memory)
-    	(spawny Game.spawns)
+    	(spawny Game.spawns Game.creeps)
     	(creepy Game.creeps))))
