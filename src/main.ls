@@ -7,6 +7,12 @@
 (macro define (f args body)
     (var ~f (function ~args ~body)))
 
+(macro car (ls)
+    (get 0 ~ls))
+
+;;; ENVIRONMENT ;;;
+
+
 ;;; CREEP BEHAVIOR ;;;
 
 (define is_creep_carry_energy_empty (creep) 
@@ -16,6 +22,26 @@
 (define is_creep_carry_capacity (creep) 
   (= (_.sum (.carry creep)) 
      (.carryCapacity creep)))
+
+(define creep_room_find_structures_under_capacity (creep)
+  (-> creep 
+      (.room.find FIND_STRUCTURES 
+		  (object filter 
+			  (function (structure) 
+				    (&& (|| (= (.structureType structure) 
+						STRUCTURE_EXTENSION)
+					    (= (.structureType structure)
+						STRUCTURE_SPAWN))
+					(< (.energy structure) 
+					   (.energyCapacity structure))))))))
+
+(define creep_transfer (creep targets resource)
+  (when (and (> (.length targets) 0) 
+	     (= (-> creep 
+		    (.transfer (car targets) 
+			       resource)) 
+		ERR_NOT_IN_RANGE))
+    (-> creep (.moveTo (car targets)))))
 
 (define creep_move_to_resources (creep)
   (let (sources) ((-> (.room creep) (.find FIND_SOURCES)))
@@ -34,14 +60,17 @@
 ;; TODO: make creep generator
 ;; (define creeper () )
 
-(define harvester (creep) (console.log "harvester not implemented yet!"))
+(define harvester (creep) 
+  (cond
+    (is_creep_carry_energy_empty creep) (creep_move_to_resources creep)
+    true (creep_transfer creep (creep_room_find_structures_under_capacity creep) RESOURCE_ENERGY)))
 
 (define builder (creep) (console.log "builder not implemented yet!"))
 
 (define updater (creep) 
   (cond
     (is_creep_carry_energy_empty creep) (creep_move_to_resources creep)
-    (is_creep_carry_capacity creep) (creep_upgrade_controller creep)))
+    true (creep_upgrade_controller creep)))
 
 
 ;;; CORE ;;;

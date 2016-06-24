@@ -5,6 +5,20 @@ var is_creep_carry_energy_empty = function(creep) {
 var is_creep_carry_capacity = function(creep) {
     return (_.sum((creep).carry) === (creep).carryCapacity);
 };
+var creep_room_find_structures_under_capacity = function(creep) {
+    return (creep).room.find(FIND_STRUCTURES,{
+        filter: function(structure) {
+            return ((((structure).structureType === STRUCTURE_EXTENSION) || ((structure).structureType === STRUCTURE_SPAWN)) && ((structure).energy < (structure).energyCapacity));
+        }
+    });
+};
+var creep_transfer = function(creep,targets,resource) {
+    return (and(((targets).length > 0),((creep).transfer(targets[0],resource) === ERR_NOT_IN_RANGE)) ?
+        (function() {
+            return (creep).moveTo(targets[0]);
+        })() :
+        undefined);
+};
 var creep_move_to_resources = function(creep) {
     return (function(sources) {
         return (((creep).harvest(sources[0]) === ERR_NOT_IN_RANGE) ?
@@ -22,7 +36,11 @@ var creep_upgrade_controller = function(creep) {
         undefined);
 };
 var harvester = function(creep) {
-    return console.log("harvester not implemented yet!");
+    return (is_creep_carry_energy_empty(creep) ?
+        creep_move_to_resources(creep) :
+        (true ?
+            creep_transfer(creep,creep_room_find_structures_under_capacity(creep),RESOURCE_ENERGY) :
+            undefined));
 };
 var builder = function(creep) {
     return console.log("builder not implemented yet!");
@@ -30,7 +48,7 @@ var builder = function(creep) {
 var updater = function(creep) {
     return (is_creep_carry_energy_empty(creep) ?
         creep_move_to_resources(creep) :
-        (is_creep_carry_capacity(creep) ?
+        (true ?
             creep_upgrade_controller(creep) :
             undefined));
 };
