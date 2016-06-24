@@ -17,7 +17,7 @@ var memory = function() {
     });
 };
 var creeper = function(spawn) {
-    return createCreep(spawn)([WORK,CARRY,MOVE],undefined,{role: 'harvester'});
+    return (spawn).createCreep([WORK,CARRY,MOVE],undefined,{role: 'harvester'});
 };
 var should_create_creep = function() {
     return true;

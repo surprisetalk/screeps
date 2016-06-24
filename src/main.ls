@@ -25,7 +25,7 @@
 
 (define creeper (spawn)
     (-> spawn
-	(createCreep [WORK,CARRY,MOVE] undefined {role: 'harvester'})))
+	(.createCreep [WORK,CARRY,MOVE] undefined {role: 'harvester'})))
 
 (define should_create_creep () true)
 
