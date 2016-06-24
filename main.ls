@@ -11,7 +11,7 @@
 		 	  (delete (get name Memory.creeps))))
 		   (var harvesters 
 		 	(_.filter Game.creeps 
-		 		  (function (creep) (== creep.memory.role "harvester"))))
+		 		  (function (creep) (= creep.memory.role "harvester"))))
 		 (console.log (+ "Harvesters: " 
 		 		 harvesters.length))
 		 (when (< harvesters.length 2)
@@ -25,9 +25,9 @@
 		 (for (name Game.creeps)
 		      (do 
 		 	  (var creep (get name Game.creeps))
-		 	  (when (== creep.memory.role "harvester")
+		 	  (when (= creep.memory.role "harvester")
 		 	    (roleHarvester.run creep))
-		 	(when (== creep.memory.role "upgrader") 
+		 	(when (= creep.memory.role "upgrader") 
 		 	  (roleUpgrader.run creep))))
 		 )
 	       )
