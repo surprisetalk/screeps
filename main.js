@@ -3,40 +3,17 @@ var roleHarvester = require('role.harvester');
 var roleUpgrader = require('role.upgrader');
 module.exports.loop = function() {
     return (function() {
-        (function(___monad) {
-            var mBind = ___monad.mBind,
-                mResult = ___monad.mResult,
-                mZero = ___monad.mZero,
-                mPlus = ___monad.mPlus;
-            var ____mResult = function(___arg) {
-                return (((typeof(___arg) === "undefined") && (!(typeof(mZero) === "undefined"))) ?
-                    mZero :
-                    mResult(___arg));
-            };
-            return mBind(Memory.creeps,function(name) {
-                return (function() {
-                    return ____mResult(((!Game.creeps[name]) ?
-                        (function() {
-                            return delete(Memory.creeps[name]);
-                        })() :
-                        undefined));
-                })();
+        (function(o,f,s) {
+            var _k = Object.keys(o);
+            return (_k).forEach(function(elem) {
+                return f.call(s,o[elem],elem,o);
             });
-        })({
-            mBind: function(mv,mf) {
-                return ((mv).map(mf)).reduce(function(accum,val) {
-                    return accum.concat(val);
-                },[]);
-            },
-            mResult: function(v) {
-                return [v];
-            },
-            mZero: [],
-            mPlus: function() {
-                return (Array.prototype.slice.call(arguments)).reduce(function(accum,val) {
-                    return accum.concat(val);
-                },[]);
-            }
+        })(Memory.creeps,function(val,name) {
+            return ((!Game.creeps[name]) ?
+                (function() {
+                    return delete(Memory.creeps[name]);
+                })() :
+                undefined);
         });
         var harvesters = _.filter(Game.creeps,function(creep) {
             return (creep.memory.role === "harvester");
@@ -50,48 +27,25 @@ module.exports.loop = function() {
                 })();
             })() :
             undefined);
-        return (function(___monad) {
-            var mBind = ___monad.mBind,
-                mResult = ___monad.mResult,
-                mZero = ___monad.mZero,
-                mPlus = ___monad.mPlus;
-            var ____mResult = function(___arg) {
-                return (((typeof(___arg) === "undefined") && (!(typeof(mZero) === "undefined"))) ?
-                    mZero :
-                    mResult(___arg));
-            };
-            return mBind(Game.creeps,function(name) {
-                return (function() {
-                    return ____mResult((function() {
-                        var creep = Game.creeps[name];
-                        ((creep.memory.role === "harvester") ?
-                            (function() {
-                                return roleHarvester.run(creep);
-                            })() :
-                            undefined);
-                        return ((creep.memory.role === "upgrader") ?
-                            (function() {
-                                return roleUpgrader.run(creep);
-                            })() :
-                            undefined);
-                    })());
-                })();
+        return (function(o,f,s) {
+            var _k = Object.keys(o);
+            return (_k).forEach(function(elem) {
+                return f.call(s,o[elem],elem,o);
             });
-        })({
-            mBind: function(mv,mf) {
-                return ((mv).map(mf)).reduce(function(accum,val) {
-                    return accum.concat(val);
-                },[]);
-            },
-            mResult: function(v) {
-                return [v];
-            },
-            mZero: [],
-            mPlus: function() {
-                return (Array.prototype.slice.call(arguments)).reduce(function(accum,val) {
-                    return accum.concat(val);
-                },[]);
-            }
+        })(Game.creeps,function(val,name) {
+            return (function() {
+                var creep = val;
+                ((creep.memory.role === "harvester") ?
+                    (function() {
+                        return roleHarvester.run(creep);
+                    })() :
+                    undefined);
+                return ((creep.memory.role === "upgrader") ?
+                    (function() {
+                        return roleUpgrader.run(creep);
+                    })() :
+                    undefined);
+            })();
         });
     })();
 };
