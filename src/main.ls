@@ -46,7 +46,7 @@
 					   (.energyCapacity structure))))))))
 
 (define creep_transfer (creep targets resource)
-  (when (and (> (.length targets) 0) 
+  (when (&& (> (.length targets) 0) 
 	     (= (-> creep 
 		    (.transfer (choose targets) 
 			       resource)) 

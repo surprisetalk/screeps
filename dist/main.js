@@ -15,7 +15,7 @@ var creep_room_find_structures_under_capacity = function(creep) {
     });
 };
 var creep_transfer = function(creep,targets,resource) {
-    return (and(((targets).length > 0),((creep).transfer(targets[floor((random() * (targets).length))],resource) === ERR_NOT_IN_RANGE)) ?
+    return ((((targets).length > 0) && ((creep).transfer(targets[floor((random() * (targets).length))],resource) === ERR_NOT_IN_RANGE)) ?
         (function() {
             return (creep).moveTo(targets[0]);
         })() :
