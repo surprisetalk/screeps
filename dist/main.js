@@ -69,10 +69,13 @@ var memory = function() {
     });
 };
 var creepier = function(spawn) {
-    return (spawn).createCreep([WORK,CARRY,MOVE],undefined,{role: 'harvester'});
+    return spawn[floor((random() * (spawn).length))]([
+        ([WORK,CARRY,MOVE]).createCreep,
+        ([WORK,CARRY,MOVE]).createCreep
+    ]);
 };
 var should_create_creep = function() {
-    return true;
+    return false;
 };
 var spawny = function(spawns) {
     return (function(o,f,s) {

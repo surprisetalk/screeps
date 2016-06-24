@@ -92,10 +92,13 @@
 		       (delete (get name Memory.creeps))))))
 
 (define creepier (spawn)
-    (-> spawn
-	(.createCreep [WORK,CARRY,MOVE] undefined {role: 'harvester'})))
+  (-> spawn
+      (choose 
+       (array
+	(.createCreep [WORK,CARRY,MOVE] undefined {role: 'harvester'})
+	(.createCreep [WORK,CARRY,MOVE] undefined {role: 'updater'})))))
 
-(define should_create_creep () true)
+(define should_create_creep () false)
 
 (define spawny (spawns)
   (eachKey spawns 
