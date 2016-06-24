@@ -7,20 +7,27 @@
 (macro define (f args body)
     (var ~f (function ~args ~body)))
 
+
 ;;; CREEPS ;;;
 
-(define harvester (creep) true)
+;; (define creeper () )
+
+(define harvester (creep) (console.log "harvester not implemented yet!"))
+
+(define builder (creep) (console.log "builder not implemented yet!"))
+
+(define updater (creep) (console.log "updater not implemented yet!"))
 
 
 ;;; CORE ;;;
 
 (define memory ()  
   (eachKey Memory.creeps 
-	   (function (val name)
+	   (function (creep name)
 		     (when (! (get name Game.creeps)) 
 		       (delete (get name Memory.creeps))))))
 
-(define creeper (spawn)
+(define creepier (spawn)
     (-> spawn
 	(.createCreep [WORK,CARRY,MOVE] undefined {role: 'harvester'})))
 
@@ -28,15 +35,17 @@
 
 (define spawny (spawns)
   (eachKey spawns 
-    (function (val key) 
-      (when (should_create_creep) (creeper val)))))
+    (function (spawn name) 
+      (when (should_create_creep) (creepier spawn)))))
 
 (define creepy (creeps)
   (eachKey creeps 
-    (function (val key)
-      (let (role) ((.role (.memory val))) 
+    (function (creep name)
+      (let (role) ((.role (.memory creep))) 
         (cond 
-	 (= role "harvester") (console.log "running harvester")
+	 (= role "harvester") (harvester creep)
+	 (= role "builder") (builder creep)
+	 (= role "updater") (updater creep)
 	 true (console.log (+ "Could not find role " role)))))))
 
 
