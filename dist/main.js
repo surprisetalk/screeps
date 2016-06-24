@@ -23,10 +23,28 @@ var should_create_creep = function() {
     return true;
 };
 var spawny = function(spawns) {
-    return true;
+    return (function(o,f,s) {
+        var _k = Object.keys(o);
+        return (_k).forEach(function(elem) {
+            return f.call(s,o[elem],elem,o);
+        });
+    })(spawns,function(val,key) {
+        return (should_create_creep() ?
+            (function() {
+                return creeper(val);
+            })() :
+            undefined);
+    });
 };
 var creepy = function(creeps) {
-    return true;
+    return (function(o,f,s) {
+        var _k = Object.keys(o);
+        return (_k).forEach(function(elem) {
+            return f.call(s,o[elem],elem,o);
+        });
+    })(creeps,function(val,key) {
+        return ((val).memory).role(val);
+    });
 };
 module.exports.loop = function() {
 };

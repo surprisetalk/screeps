@@ -29,14 +29,15 @@
 
 (define should_create_creep () true)
 
-(define spawny (spawns) true)
-  ;; (eachKey spawns (val key)
-  ;;   (when (should_create_creep) (creeper val))))
+(define spawny (spawns)
+  (eachKey spawns 
+    (function (val key) 
+      (when (should_create_creep) (creeper val)))))
 
-;; TODO: how do we dynamically run the function based on role?
-(define creepy (creeps) true)
-  ;; (eachKey creeps (val key)
-  ;;   (run (.role (.memory val)) val)))
+(define creepy (creeps)
+  (eachKey creeps 
+    (function (val key)
+      (run (.role (.memory val)) val))))
 
 
 ;;; LOOP ;;;
