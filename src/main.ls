@@ -7,9 +7,6 @@
 (macro define (f args body)
     (var ~f (function ~args ~body)))
 
-(macro run (role creep)
-    (~role ~creep))
-
 ;;; CREEPS ;;;
 
 (define harvester (creep) true)
@@ -37,7 +34,10 @@
 (define creepy (creeps)
   (eachKey creeps 
     (function (val key)
-      (run (.role (.memory val)) val))))
+      (let (role) ((.role (.memory val))) 
+        (cond 
+	 (= role "harvester") (console.log "running harvester")
+	 true (console.log (+ "Could not find role " role)))))))
 
 
 ;;; LOOP ;;;

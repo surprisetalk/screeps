@@ -43,7 +43,13 @@ var creepy = function(creeps) {
             return f.call(s,o[elem],elem,o);
         });
     })(creeps,function(val,key) {
-        return ((val).memory).role(val);
+        return (function(role) {
+            return ((role === "harvester") ?
+                console.log("running harvester") :
+                (true ?
+                    console.log(("Could not find role " + role)) :
+                    undefined));
+        })(((val).memory).role);
     });
 };
 module.exports.loop = function() {
