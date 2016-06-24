@@ -39,7 +39,7 @@ module.exports.loop = function() {
             }
         });
         var harvesters = _.filter(Game.creeps,function(creep) {
-            return ==(creep.memory.role,"harvester");
+            return (creep.memory.role === "harvester");
         });
         console.log(("Harvesters: " + harvesters.length));
         ((harvesters.length < 2) ?
@@ -64,12 +64,12 @@ module.exports.loop = function() {
                 return (function() {
                     return ____mResult((function() {
                         var creep = Game.creeps[name];
-                        (==(creep.memory.role,"harvester") ?
+                        ((creep.memory.role === "harvester") ?
                             (function() {
                                 return roleHarvester.run(creep);
                             })() :
                             undefined);
-                        return (==(creep.memory.role,"upgrader") ?
+                        return ((creep.memory.role === "upgrader") ?
                             (function() {
                                 return roleUpgrader.run(creep);
                             })() :
