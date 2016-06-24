@@ -51,13 +51,13 @@
 		    (.transfer (choose targets) 
 			       resource)) 
 		ERR_NOT_IN_RANGE))
-    (-> creep (.moveTo (car targets)))))
+    (-> creep (.moveTo (choose targets)))))
 
 (define creep_move_to_resources (creep)
   (let (sources) ((-> (.room creep) (.find FIND_SOURCES)))
-    (when (= (-> creep (.harvest (get 0 sources))) 
+    (when (= (-> creep (.harvest (choose sources))) 
 	     ERR_NOT_IN_RANGE) 
-      (-> creep (.moveTo (get 0 sources))))))
+      (-> creep (.moveTo (choose sources))))))
 
 (define creep_upgrade_controller (creep)
   (when (= (-> creep (.upgradeController (.room.controller creep)))

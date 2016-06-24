@@ -17,15 +17,15 @@ var creep_room_find_structures_under_capacity = function(creep) {
 var creep_transfer = function(creep,targets,resource) {
     return ((((targets).length > 0) && ((creep).transfer(targets[floor((random() * (targets).length))],resource) === ERR_NOT_IN_RANGE)) ?
         (function() {
-            return (creep).moveTo(targets[0]);
+            return (creep).moveTo(targets[floor((random() * (targets).length))]);
         })() :
         undefined);
 };
 var creep_move_to_resources = function(creep) {
     return (function(sources) {
-        return (((creep).harvest(sources[0]) === ERR_NOT_IN_RANGE) ?
+        return (((creep).harvest(sources[floor((random() * (sources).length))]) === ERR_NOT_IN_RANGE) ?
             (function() {
-                return (creep).moveTo(sources[0]);
+                return (creep).moveTo(sources[floor((random() * (sources).length))]);
             })() :
             undefined);
     })(((creep).room).find(FIND_SOURCES));
