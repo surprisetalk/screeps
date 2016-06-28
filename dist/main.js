@@ -7,20 +7,20 @@ var choose = ls =>
 //===============================
 
 var is_source = id => 
-    id && "_energy" in Game.getObjectById( id ) && !is_spawn( id );
+    id && Game.getObjectById( id ) && "_energy" in Game.getObjectById( id ) && !is_spawn( id );
 
 var is_structure = id =>
-    id && "structureType" in Game.getObjectById( id );
+    id && Game.getObjectById( id ) && "structureType" in Game.getObjectById( id );
 
 var is_spawn = id =>
-    id && "structureType" in Game.getObjectById( id ) && Game.getObjectById( id ).structureType == STRUCTURE_SPAWN;
+    id && Game.getObjectById( id ) && "structureType" in Game.getObjectById( id ) && Game.getObjectById( id ).structureType == STRUCTURE_SPAWN;
 
 var is_controller = id =>
-    id && "level" in Game.getObjectById( id );
+    id && Game.getObjectById( id ) && "level" in Game.getObjectById( id );
 
 // TODO: more construction sites
 var is_construction_site = id =>
-    id && "structureType" in Game.getObjectById( id ) && "progress" in Game.getObjectById( id ) && ( Game.getObjectById( id ).structureType == STRUCTURE_EXTENSION || Game.getObjectById( id ).structureType == STRUCTURE_ROAD );
+    id && Game.getObjectById( id ) && "structureType" in Game.getObjectById( id ) && "progress" in Game.getObjectById( id ) && ( Game.getObjectById( id ).structureType == STRUCTURE_EXTENSION || Game.getObjectById( id ).structureType == STRUCTURE_ROAD );
 
 //===============================
 
@@ -58,34 +58,28 @@ var creep_move_to = ( creep, verb, obj, subj ) =>
 
 var creep_transfer = creep =>
 {
-    // creep.say( "TRANSFER!" );
-
     var targets = creep_room_find_structures_under_capacity( creep );
     var target = creep.memory.dest in targets.map( target => target.id )
 	? Game.getObjectById( creep.memory.dest )
-	: choose( targets );
+	: creep.pos.findClosestByRange( FIND_STRUCTURES, { filter: structure => ( ( structure.structureType == STRUCTURE_EXTENSION || structure.structureType == STRUCTURE_SPAWN ) && structure.energy < structure.energyCapacity ) } );
     
     if( target && "id" in target )
 	creep_move_to( creep, "transfer", target, RESOURCE_ENERGY );
     else
-	creep_upgrade_controller( creep );
+	creep_build( creep );
 };
 
 var creep_move_to_spawn = creep =>
 {
-    // creep.say( "SPAWN!" );
-
     var spawn = is_spawn( creep.memory.dest )
 	? Game.getObjectById( creep.memory.dest )
 	: creep_room_find_spawn( creep );
     
-    creep_move_to( creep, "transfer", spawn );
+    creep_move_to( creep, "transfer", spawn, RESOURCE_ENERGY );
 };
 
 var creep_move_to_resources = creep =>
 {
-    // creep.say( "RESOURCES!" );
-
     // TODO: check to make sure construction doesn't already exist
     if( creep.memory.x && creep.memory.y && Math.random() < 0.01 )
 	creep.room.createConstructionSite( creep.memory.x, creep.memory.y, STRUCTURE_ROAD );
@@ -95,49 +89,45 @@ var creep_move_to_resources = creep =>
 
     var source = is_source( creep.memory.dest )
 	? Game.getObjectById( creep.memory.dest )
-	: creep.pos.findClosestByPath( FIND_SOURCES );
-	// : creep.pos.findClosestByPath( FIND_SOURCES, { filter: source => _.filter( Game.creeps, creep => creep.memory.dest == source.id ).length < 4 } );
+	: Math.random() < 0.05
+	    ? creep.pos.findClosestByRange( FIND_SOURCES )
+	    : choose( creep.room.find( FIND_SOURCES ) );
+	    // : creep.pos.findClosestByPath( FIND_SOURCES, { filter: source => _.filter( Game.creeps, creep => creep.memory.dest == source.id ).length < 4 } );
     
     creep_move_to( creep, "harvest", source );
 };
 
 var creep_upgrade_controller = creep =>
-{
-    // creep.say( "UPGRADE!" );
     creep_move_to( creep, "upgradeController", creep.room.controller );
-};
 
 var creep_build = creep =>
 { 
-    // KLUDGE
-    // var site = creep.pos.findClosestByRange( FIND_CONSTRUCTION_SITES, { filter: s => s.structureType == STRUCTURE_EXTENSION } );
-    // if( !site || !( "id" in site ) )
-
-    // creep.say( "BUILD!" );
-
+    var extensions = creep.room.find( FIND_CONSTRUCTION_SITES, { filter: s => s.structureType == STRUCTURE_EXTENSION } );
     var site = is_construction_site( creep.memory.dest )
 	? Game.getObjectById( creep.memory.dest )
-	: creep.pos.findClosestByRange( FIND_CONSTRUCTION_SITES );
-
+	: extensions.length && Math.random() > 0.5
+	    ? choose( extensions )
+	    : creep.pos.findClosestByRange( FIND_CONSTRUCTION_SITES );
+    
     if( site && "id" in site )
 	creep_move_to( creep, "build", site );
     else
-	creep_transfer( creep );
+	creep_upgrade_controller( creep );
 };
 
 var creep_continue = creep =>
 {
-    // creep.say( "CONTINUE!" );
-
     if( creep.memory.dest )
 	if( is_source( creep.memory.dest ) )
 	    creep_move_to_resources( creep );
-	else if( is_construction_site( creep.memory.dest ) )
-	    creep_build( creep );
 	else if( is_controller( creep.memory.dest ) )
 	    creep_upgrade_controller( creep );
 	else if( is_structure( creep.memory.dest ) )
 	    creep_transfer( creep );
+	else if( is_construction_site( creep.memory.dest ) )
+	    creep_build( creep );
+	else if( is_spawn( creep.memory.dest ) )
+	    creep_move_to_spawn( creep );
 	else
 	    ;
     else
@@ -157,7 +147,7 @@ var creeper = ( parts, run ) =>
 // TODO: get rid of roles and decide actions based on priority & parts
 var roles = {
     harvester: creeper( 
-	[ WORK, WORK, CARRY, CARRY, MOVE, MOVE ],
+	[ WORK, CARRY, CARRY, MOVE, MOVE ],
 	creep => is_creep_old( creep )
 	    ? creep_move_to_spawn( creep )
 	    : is_creep_carry_energy_empty( creep )
@@ -167,7 +157,7 @@ var roles = {
 		    : creep_continue( creep )
     ),
     builder: creeper( 
-    	[ WORK, WORK, WORK, CARRY, MOVE ],
+    	[ WORK, WORK, CARRY, MOVE ],
 	creep => is_creep_old( creep )
 	    ? creep_move_to_spawn( creep )
 	    : is_creep_carry_energy_empty( creep )
@@ -177,13 +167,14 @@ var roles = {
 		    : creep_continue( creep )
     ),
     updater: creeper( 
-	[ WORK, WORK, WORK, CARRY, MOVE ],
+	[ WORK, WORK, CARRY, MOVE ],
 	creep => is_creep_old( creep )
 	    ? creep_move_to_spawn( creep )
 	    : is_creep_carry_energy_empty( creep )
 		? creep_move_to_resources( creep )
 		: is_creep_carry_capacity( creep )
-		    ? creep_upgrade_controller( creep )
+		    // ? creep_upgrade_controller( creep )
+		    ? creep_build( creep )
 		    : creep_continue( creep )
     )
 };
@@ -206,7 +197,7 @@ var creepier = ( spawn, creeps ) =>
 };
 
 var should_create_creep = spawn =>
-    ( Game.cpu.bucket / Game.cpu.limit ) > 0.5 && !spawn.spawning && spawn.energy >= spawn.energyCapacity;
+    _.values( Game.creeps ).length < 18 && ( Game.cpu.bucket / Game.cpu.limit ) > 0.5 && !spawn.spawning && spawn.energy >= spawn.energyCapacity;
 
 var spawny = ( spawns, creeps ) =>
     _.each( spawns, spawn => should_create_creep( spawn ) ? creepier( spawn, creeps ) : renewy( spawn, creeps ) );
@@ -220,7 +211,7 @@ var extensionier = room =>
     if( !room.find( FIND_CONSTRUCTION_SITES, { filter: structure => structure.structureType == STRUCTURE_EXTENSION } ).length && room.find( FIND_STRUCTURES, { filter: s => s.structureType == STRUCTURE_EXTENSION } ).length <= 5 )
     {
     	var source = choose( room.find( FIND_SOURCES ) );
-	room.createConstructionSite( parseInt( Math.random() * 5 + source.pos.x ), parseInt( Math.random() * 5 + source.pos.y ), STRUCTURE_EXTENSION );
+	room.createConstructionSite( parseInt( Math.random() * 10 + source.pos.x ), parseInt( Math.random() * 10 + source.pos.y ), STRUCTURE_EXTENSION );
     }
 };
 
