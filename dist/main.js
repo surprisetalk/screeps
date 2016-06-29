@@ -144,8 +144,8 @@ var creep_find_source = creep =>
     is_source( creep.memory.dest )
 	? Game.getObjectById( creep.memory.dest )
 	: Math.random() < 0.05
-	    ? creep.pos.findClosestByRange( FIND_SOURCES )
-	    : _.sample( creep.room.find( FIND_SOURCES ) );
+	    ? _.sample( creep.room.find( FIND_SOURCES ) )
+	    : creep.pos.findClosestByRange( FIND_SOURCES );
 
 var creep_find_constructions = creep => 
     creep.room.find( FIND_CONSTRUCTION_SITES, { filter: is_structure_type( [ STRUCTURE_EXTENSION ] ) } );
@@ -155,7 +155,7 @@ var creep_find_construction = creep =>
     var extensions = creep_find_constructions( creep );
     return is_construction_site( creep.memory.dest )
     	? Game.getObjectById( creep.memory.dest )
-    	: extensions.length && Math.random() < 0.5
+    	: extensions.length && Math.random() < 0.25
     	    ? _.sample( extensions )
     	    : creep.pos.findClosestByRange( FIND_CONSTRUCTION_SITES );
 };
@@ -225,11 +225,13 @@ function creep_choose( creep )
 {
     creep.memory.dest = null;
     var job_count = _.countBy( _.map( _.map( Game.creeps, "memory" ), "job" ) );
-    if( job_count['build'] / _.sum( job_count ) < 0.5 && creep_find_gardens( creep ).length )
+    // if( job_count['garden'] / _.sum( job_count ) < 0.5 && creep_find_gardens( creep ).length )
+    if( creep_find_gardens( creep ).length )
     	creep_do('garden')( creep );
-    else if( job_count['build'] / _.sum( job_count ) < 0.5 && creep_find_constructions( creep ).length )
+    // else if( job_count['build'] / _.sum( job_count ) < 0.5 && creep_find_constructions( creep ).length )
+    else if( Math.random() < 0.25 && creep_find_constructions( creep ).length )
     	creep_do('build')( creep );
-    else if( Math.random() < 0.05 && "id" in creep_find_ruin( creep ) )
+    else if( Math.random() < 0.1 && "id" in creep_find_ruin( creep ) )
     	creep_do('repair')( creep );
     else
     	creep_do('upgrade')( creep );
