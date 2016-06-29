@@ -1,55 +1,120 @@
 
-var that = this;
+var MIN_CREEPS = 18;
+var MAX_CREEPS = 21;
 
-var choose = ls =>
-    ls[ Math.floor( Math.random() * ls.length ) ];
+// ================================
 
-//===============================
+// TODO: spawn (300) + n * extensions (50)
+var spawn_capacity = () => 800;
 
-var is_source = id => 
-    id && Game.getObjectById( id ) && ( "_energy" in Game.getObjectById( id ) || "_store" in Game.getObjectById( id ) ) && !is_spawn( id );
+// ================================
 
-var is_structure = id =>
-    id && Game.getObjectById( id ) && "structureType" in Game.getObjectById( id );
+var memorizing = ( creep, name ) =>
+    !( name in Game.creeps ) 
+	? delete Game.creeps[ name ] 
+	: null;
 
-var is_spawn = id =>
-    id && Game.getObjectById( id ) && "structureType" in Game.getObjectById( id ) && Game.getObjectById( id ).structureType == STRUCTURE_SPAWN;
+// ================================
 
-var is_controller = id =>
-    id && Game.getObjectById( id ) && "level" in Game.getObjectById( id );
+var recombinate = spend =>
+    spend < 50
+	? []
+	: spend >= 100 && Math.random() < 0.333
+	    ? [ "work" ].concat( recombinate( spend - 100 ) )
+	    : [ Math.random() < 0.5 ? "move" : "carry" ].concat( recombinate( spend - 50 ) );
+
+var conceive = () =>
+    [ "move", "work", "carry" ].concat( recombinate( spawn_capacity() - 200 ) );
+
+var birth = ( spawn, body ) =>
+    spawn.canCreateCreep( body ) == OK 
+	? spawn.createCreep( body, undefined, { cost: spawn_capacity() } )
+	: null;
+
+var nurture = spawn =>
+    _.each( _.filter( Game.creeps, creep => creep.ticksToLive < 500 ), creep => spawn.renewCreep( creep ) );
+
+var birthing = spawn => 
+    !spawn.spawning && spawn.energy == spawn.energyCapacity
+	? birth( spawn, conceive() ) 
+	: nurture( spawn );
+
+// ================================
+
+var snipe = ( creeps, craps ) => 
+    _.values( creeps ).length > MIN_CREEPS && craps.length
+	? _.sample( craps ).suicide()
+	: null;
+
+var is_creep_pleb = creep =>
+    !( "cost" in creep.memory && creep.memory.cost >= spawn_capacity() );
+
+var killing = creeps =>
+    snipe( creeps, _.filter( creeps, is_creep_pleb ) );
+
+// ================================
+
+var isser = predicate => id =>
+    id && Game.getObjectById( id ) && predicate( Game.getObjectById( id ) );
+
+var is_structure_type = types => structure =>
+    "structureType" in structure && _.includes( types, structure.structureType );
+
+var is_source = isser( source => "ticksToRegeneration" in source );
+
+var is_spawn = isser( is_structure_type( [ STRUCTURE_SPAWN ] ) );
+
+var is_structure = isser( struct => "structureType" in struct );
 
 // TODO: more construction sites
-var is_construction_site = id =>
-    id && Game.getObjectById( id ) && "structureType" in Game.getObjectById( id ) && "progress" in Game.getObjectById( id ) && ( Game.getObjectById( id ).structureType == STRUCTURE_EXTENSION || Game.getObjectById( id ).structureType == STRUCTURE_ROAD || Game.getObjectById( id ).structureType == STRUCTURE_CONTAINER );
+var is_construction_site = isser( struct => "progress" in struct && !is_structure_type( [ STRUCTURE_CONTROLLER ] )( struct ) );
 
-//===============================
+var is_structure_stable = isser( struct => ( struct.hits / struct.hitsMax ) < 0.85 );
 
-var is_creep_old = creep =>
+var open_structure_filter = struct => 
+    ( ( "energy" in struct && "energyCapacity" in struct && struct.energy < struct.energyCapacity ) 
+      || ( "store" in struct && "storeCapacity" in struct && struct.store < struct.storeCapacity ) ) 
+    && is_structure_type( [ STRUCTURE_SPAWN, STRUCTURE_EXTENSION, STRUCTURE_CONTAINER ] )( struct );
+     
+var is_structure_open = isser( open_structure_filter );
+
+// ================================
+
+// TODO: hit points
+var is_creep_sick = creep => 
     creep.ticksToLive <= 150;
 
-var is_creep_carry_energy_empty = creep => 
+// TODO: hit points
+var is_creep_well = creep => 
+    creep.ticksToLive >= 1000;
+
+var is_creep_hungry = creep => 
     !creep.carry.energy;
 
-var is_creep_carry_capacity = creep =>
+var is_creep_full = creep =>
     _.sum( creep.carry ) == creep.carryCapacity;
 
-//===============================
+var is_creep_bored = creep =>
+    !creep.memory.job;
 
-var creep_room_find_spawn = creep =>
-    creep.pos.findClosestByPath( FIND_STRUCTURES, { filter: structure => structure.structureType == STRUCTURE_SPAWN } );
+var is_creep_building = creep =>
+    !creep.memory.dest || is_construction_site( creep.memory.dest );
 
-var creep_room_find_structures_under_capacity = creep =>
-    creep.room.find( FIND_STRUCTURES, { filter: structure => ( ( structure.structureType == STRUCTURE_EXTENSION || structure.structureType == STRUCTURE_SPAWN || structure.structureType == STRUCTURE_CONTAINER ) && ( ( "energy" in structure && structure.energy < structure.energyCapacity ) || ( "store" in structure && _.sum( structure.store ) < structure.storeCapacity ) ) ) } );
+var is_creep_repairing = creep =>
+    !creep.memory.dest || !is_structure_stable( creep.memory.dest );
 
-//===============================
+var is_creep_gardening = creep =>
+    !creep.memory.dest || creep.carry.energy && is_structure_open( creep.memory.dest );
 
+// ================================
+
+// TODO: this is ugly
 var creep_move_to = ( creep, verb, obj, subj ) =>
 {
     if( obj && "id" in obj )
 	creep.memory.dest = obj.id;
     else
 	creep.say( "I'm lost!" );
-	// creep.memory.dest = choose( _.values( Game.creeps ) ).memory.dest;
 
     // TODO: check to make sure construction doesn't already exist
     if( creep.memory.x && creep.memory.y && Math.random() < 0.01 )
@@ -63,247 +128,148 @@ var creep_move_to = ( creep, verb, obj, subj ) =>
     	: null;
 };
 
-var creep_transfer = creep =>
-{
-    var targets = creep_room_find_structures_under_capacity( creep );
-    var target = creep.memory.dest in targets.map( target => target.id )
-	? Game.getObjectById( creep.memory.dest )
-	: creep.pos.findClosestByRange( FIND_STRUCTURES, { filter: structure => ( ( structure.structureType == STRUCTURE_EXTENSION || structure.structureType == STRUCTURE_SPAWN ) && structure.energy < structure.energyCapacity ) } );
-    
-    if( target && "id" in target )
-	creep_move_to( creep, "transfer", target, RESOURCE_ENERGY );
-    else
-	creep_build( creep );
-};
+// ================================
 
-var creep_move_to_spawn = creep =>
-{
-    var spawn = is_spawn( creep.memory.dest )
+var creep_find_spawn = creep =>
+    is_spawn( creep.memory.dest )
 	? Game.getObjectById( creep.memory.dest )
-	: creep_room_find_spawn( creep );
-    
-    creep_move_to( creep, "transfer", spawn, RESOURCE_ENERGY );
-};
+	: creep.pos.findClosestByRange( FIND_STRUCTURES, { filter: is_structure_type( [ STRUCTURE_SPAWN ] ) } );
 
-var creep_move_to_resources = creep =>
-{
-    // TODO: containers need to count as sources too...
-    var source = is_source( creep.memory.dest )
+var creep_find_source = creep =>
+    is_source( creep.memory.dest )
 	? Game.getObjectById( creep.memory.dest )
 	: Math.random() < 0.05
 	    ? creep.pos.findClosestByRange( FIND_SOURCES )
-	    : choose( creep.room.find( FIND_SOURCES ) );
-	    // : creep.pos.findClosestByPath( FIND_SOURCES, { filter: source => _.filter( Game.creeps, creep => creep.memory.dest == source.id ).length < 4 } );
-    
-    creep_move_to( creep, "harvest", source );
+	    : _.sample( creep.room.find( FIND_SOURCES ) );
+
+var creep_find_constructions = creep => 
+    creep.room.find( FIND_CONSTRUCTION_SITES, { filter: is_structure_type( [ STRUCTURE_EXTENSION ] ) } );
+
+var creep_find_construction = creep =>
+{
+    var extensions = creep_find_constructions( creep );
+    return is_construction_site( creep.memory.dest )
+    	? Game.getObjectById( creep.memory.dest )
+    	: extensions.length && Math.random() < 0.5
+    	    ? _.sample( extensions )
+    	    : creep.pos.findClosestByRange( FIND_CONSTRUCTION_SITES );
 };
 
-var creep_upgrade_controller = creep =>
-    creep_move_to( creep, "upgradeController", creep.room.controller );
-
-var creep_build = creep =>
-{ 
-    var extensions = creep.room.find( FIND_CONSTRUCTION_SITES, { filter: s => s.structureType == STRUCTURE_EXTENSION } );
-    var site = is_construction_site( creep.memory.dest )
-	? Game.getObjectById( creep.memory.dest )
-	: extensions.length && Math.random() < 0.5
-	    ? choose( extensions )
-	    : creep.pos.findClosestByRange( FIND_CONSTRUCTION_SITES );
-    
-    if( site && "id" in site )
-	creep_move_to( creep, "build", site );
-    else
-	creep_repair( creep );
-};
-
-var creep_repair = creep =>
-{ 
-    var site = is_structure( creep.memory.dest )
+var creep_find_ruin = creep =>
+    is_structure( creep.memory.dest )
 	? Game.getObjectById( creep.memory.dest )
 	: creep.room.findClosestByRange( FIND_STRUCTURES, { filter: s => ( s.hits / s.hitsMax ) < 0.05 } );
-    
-    if( site && "id" in site )
-	creep_move_to( creep, "repair", site );
-    else
-	creep_upgrade_controller( creep );
+
+var creep_find_gardens = creep =>
+    creep.room.find( FIND_STRUCTURES, { filter: open_structure_filter( creep ) } );
+
+var creep_find_garden = creep =>
+{
+    var targets = creep_find_gardens( creep );
+    return creep.memory.dest in targets.map( target => target.id )
+	? Game.getObjectById( creep.memory.dest )
+	: creep.pos.findClosestByRange( FIND_STRUCTURES, { filter: open_structure_filter( creep ) } );
 };
 
+// ================================
+
+var creep_go_to_spawn = creep => 
+    creep_move_to( creep, "transfer", creep_find_spawn( creep ), RESOURCE_ENERGY );
+
+var creep_go_to_source = creep =>
+    creep_move_to( creep, "harvest", creep_find_source( creep ) );
+
+var creep_go_to_controller = creep =>
+    creep_move_to( creep, "upgradeController", creep.room.controller );
+
+var creep_go_to_construction = creep =>
+    creep_move_to( creep, "build", creep_find_construction( creep ) );
+
+var creep_go_to_repair = creep =>
+    creep_move_to( creep, "repair", creep_find_ruin( creep ) );
+
+var creep_go_to_garden = creep =>
+    creep_move_to( creep, "transfer", creep_find_garden( creep ), RESOURCE_ENERGY );
+
+// ================================
+
+var iffer = ( i, t, e ) => s => i( s ) ? t( s ) : e( s );
+
+// BUG: we are checking whether they are ___ before they choose a dest
+// TODO: a lot of these jobs duplicate dest checks in the conditional
+var jobs = {
+    // TODO: include containers
+    snack: iffer( is_creep_full, creep_choose, creep_go_to_source ),
+    play: iffer( is_creep_well, creep_choose, creep_go_to_spawn ),
+    upgrade: creep_go_to_controller,
+    build: iffer( is_creep_building, creep_go_to_construction, creep_choose ),
+    repair: iffer( is_creep_repairing, creep_go_to_repair, creep_choose ),
+    garden: iffer( is_creep_gardening, creep_go_to_garden, creep_choose )
+};
+
+var creep_do = job => creep =>
+{
+    creep.memory.job = job;
+    jobs[ job ]( creep );
+};
+
+// TODO: ensure that recursive loops don't happen too much
+// TODO: decide based on parts, distance, and other screeps' jobs
+var creep_choose = creep => 
+{
+    creep.memory.dest = null;
+    var job_count = _.countBy( _.map( _.map( Game.creeps, "memory" ), "job" ) );
+    if( creep_find_gardens( creep ).length )
+	creep_do('garden')( creep );
+    else if( job_count['build'] / _.sum( job_count ) < 0.5 && creep_find_constructions( creep ).length )
+	creep_do('build')( creep );
+    else if( Math.random() < 0.5 )
+	creep_do('repair')( creep );
+    else
+	creep_do('upgrade')( creep );
+};
+	
 var creep_continue = creep =>
+    jobs[ creep.memory.job ]( creep );
+
+// TODO: is_creep_danger
+var creeping = iffer( is_creep_sick,
+		      creep_do('play'),
+		      iffer( is_creep_hungry,
+			     creep_do('snack'),
+			     iffer( is_creep_bored,
+				    creep_choose,
+				    creep_continue ) ) );
+
+// ================================
+
+// // TODO: place tower in general center of spawns, controllers, and resources
+// var towering = () => null;
+
+// var extending = () => null;
+
+// var containing = () => null;
+
+// var constructing = room =>
+// {
+//     towering(); 
+//     extending();
+//     containing();
+// };
+
+// ================================
+
+module.exports.loop = () => 
 {
-    if( creep.memory.dest )
-	if( is_source( creep.memory.dest ) )
-	    creep_move_to_resources( creep );
-	else if( is_controller( creep.memory.dest ) )
-	    creep_upgrade_controller( creep );
-	else if( is_structure( creep.memory.dest ) )
-	    creep_transfer( creep );
-	else if( is_construction_site( creep.memory.dest ) )
-	    creep_build( creep );
-	else if( is_spawn( creep.memory.dest ) )
-	    creep_move_to_spawn( creep );
-	else if( is_creep_carry_energy_empty( creep ) )
-	    creep_move_to_resources( creep );
-	else
-	    creep_transfer( creep );
-    else
-	// TODO: if empty, etc
-	creep_move_to_resources( creep );
-};
+    _.each( Memory.creeps, memorizing );
 
+    // BUG: we should do this on creeps per room
+    if( _.values( Game.creeps ).length < MAX_CREEPS )
+	_.each( Game.spawns, birthing );
 
-//==================================
+    killing( creeps );
 
-var creeper = ( parts, run ) =>
-({
-    parts: parts,
-    run: run
-});
+    _.each( Game.creeps, creeping );
 
-// TODO: generate new creep parts completely at random based on energy max
-// TODO: get rid of roles and decide actions based on priority & parts
-var roles = {
-    harvester: creeper( 
-	[ WORK, WORK, WORK, CARRY, CARRY, MOVE, MOVE ],
-	creep => is_creep_old( creep )
-	    ? creep_move_to_spawn( creep )
-	    : is_creep_carry_energy_empty( creep )
-		? creep_move_to_resources( creep )
-		: is_creep_carry_capacity( creep )
-		    ? creep_transfer( creep )
-		    : creep_continue( creep )
-    ),
-    builder: creeper( 
-    	[ WORK, WORK, WORK, WORK, CARRY, MOVE ],
-	creep => is_creep_old( creep )
-	    ? creep_move_to_spawn( creep )
-	    : is_creep_carry_energy_empty( creep )
-		? creep_move_to_resources( creep )
-		: is_creep_carry_capacity( creep )
-		    ? creep_build( creep )
-		    : creep_continue( creep )
-    ),
-    updater: creeper( 
-	[ WORK, WORK, CARRY, CARRY, CARRY, MOVE, MOVE, MOVE ],
-	creep => is_creep_old( creep )
-	    ? creep_move_to_spawn( creep )
-	    : is_creep_carry_energy_empty( creep )
-		? creep_move_to_resources( creep )
-		: is_creep_carry_capacity( creep )
-		    // ? creep_upgrade_controller( creep )
-		    ? creep_build( creep )
-		    : creep_continue( creep )
-    )
-};
-
-//==================================
-
-var spawn_capacity = () => 800;
-
-var memory = () =>
-    _.each( Memory.creeps, ( creep, name ) => !( name in Game.creeps ) ? delete Game.creeps[ name ] : null );
-
-var renewy = creeps => spawn =>
-    _.each( _.filter( creeps, creep => creep.ticksToLive < 500 ), creep => spawn.renewCreep( creep ) );
-
-var suicidey = creeps =>
-{
-    var craps = _.filter( creeps, creep => !( "cost" in creep.memory && creep.memory.cost >= spawn_capacity() ) );
-    if( _.values( Game.creeps ).length > 18 && craps.length )
-    	choose( craps ).suicide();
-};
-
-var creepier = ( spawn, creeps ) =>
-{
-    var role_histogram = _.defaults( _.countBy( creeps, creep => creep.memory.role ), _.mapValues( roles, () => 0 ) );
-    var role_name = _.reduce( role_histogram, ( min, val, key ) => val < min.val ? { key: key, val: val } : min, { key: null, val: Infinity } ).key;
-    var role = roles[ role_name ];
-
-    // var parts = {
-    // 	move: 50,
-    // 	work: 100,
-    // 	carry: 50
-    // };
-    
-    // KLUDGE
-    var creep_body_random = spend =>
-	spend < 50
-	    ? []
-	    : spend >= 100 && Math.random() < 0.333
-		? [ "work" ].concat( creep_body_random( spend - 100 ) )
-		: [ Math.random() < 0.5 ? "move" : "carry" ].concat( creep_body_random( spend - 50 ) );
-
-    var body = [ "move", "work", "carry" ].concat( creep_body_random( spawn_capacity() - 200 ) );
-    
-    if( spawn.canCreateCreep( body ) == OK )
-    	spawn.createCreep( body, undefined, { role: role_name, cost: spawn_capacity() } );
-};
-
-var should_create_creep = spawn =>
-	_.values( Game.creeps ).length < 21 
-	&& !spawn.spawning && spawn.energy == spawn.energyCapacity;
-	// TODO: check all extensions
-	// && _.filter( Game.creeps, creep => "cost" in creep.memory && creep.memory.cost == spawn.energyCapacity ).length;
-
-var spawny = ( spawns, creeps ) =>
-    _.each( spawns, spawn => should_create_creep( spawn ) ? creepier( spawn, creeps ) : null );
-
-var creepy = creeps =>
-    _.each( creeps, creep => creep.memory.role in roles ? roles[ creep.memory.role ].run( creep ) : null );
-
-
-var extensionier = room => 
-{
-    if( !room.find( FIND_CONSTRUCTION_SITES, { filter: structure => structure.structureType == STRUCTURE_EXTENSION } ).length && room.find( FIND_STRUCTURES, { filter: s => s.structureType == STRUCTURE_EXTENSION } ).length <= 10 )
-    {
-    	var source = choose( room.find( FIND_SOURCES ) );
-	room.createConstructionSite( 
-	    Math.floor( Math.random() * 10 - 5 + source.pos.x ), 
-	    Math.floor( Math.random() * 10 - 5 + source.pos.y ), 
-	    STRUCTURE_EXTENSION );
-    }
-};
-
-var containier = ( room, thing ) =>
-{
-    var source = thing.pos.findClosestByPath( FIND_SOURCES );
-    var x_dist = Math.abs( source.pos.x - thing.pos.x );
-    var y_dist = Math.abs( source.pos.y - thing.pos.y );
-    if( Math.sqrt( ( x_dist * x_dist ) + ( y_dist * y_dist ) ) >= 15 )
-    {
-	var x = ( source.pos.x + thing.pos.x ) / 2;
-	var y = ( source.pos.y + thing.pos.y ) / 2;
-	var x_hit = x_dist / 4;
-	var y_hit = x_dist / 4;
-	for( var i in _.range(25) )
-	    if( room.createConstructionSite( 
-		Math.floor( x + ( Math.random() * x_hit ) - ( x_hit / 2 ) ), 
-		Math.floor( y + ( Math.random() * y_hit ) - ( y_hit / 2 ) ), 
-		STRUCTURE_CONTAINER ) == OK )
-		    break;
-    }
-};
-
-var containey = room =>
-{
-    if( !( room.find( FIND_CONSTRUCTION_SITES, { filter: s => s.structureType == STRUCTURE_CONTAINER } ).length + room.find( FIND_STRUCTURES, { filter: s => s.structureType == STRUCTURE_CONTAINER } ).length ) )
-	_.each( [ room.controller ].concat( room.find( FIND_MY_SPAWNS ) ), thing => containier( room, thing ) );
-};
-
-var constructy = ( spawns, creeps ) =>
-{
-    _.map( spawns, "room" ).map( extensionier );
-    _.map( Game.rooms, containey );
-};
-
-
-//==================================
-
-module.exports.loop = () =>
-{
-    memory();
-    suicidey( Game.creeps );
-    spawny( Game.spawns, Game.creeps );
-    creepy( Game.creeps );
-    _.map( Game.spawns, renewy( Game.creeps ) );
-    constructy( Game.spawns, Game.creeps );
+    // _.each( Game.rooms, constructing );
 };
