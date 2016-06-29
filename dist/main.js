@@ -140,6 +140,7 @@ var creep_find_spawn = creep =>
 	? Game.getObjectById( creep.memory.dest )
 	: creep.pos.findClosestByRange( FIND_STRUCTURES, { filter: is_structure_type( [ STRUCTURE_SPAWN ] ) } );
 
+// TODO: find closest open container, else source
 var creep_find_source = creep =>
     is_source( creep.memory.dest )
 	? Game.getObjectById( creep.memory.dest )
@@ -226,12 +227,13 @@ function creep_choose( creep )
     creep.memory.dest = null;
     var job_count = _.countBy( _.map( _.map( Game.creeps, "memory" ), "job" ) );
     // if( job_count['garden'] / _.sum( job_count ) < 0.5 && creep_find_gardens( creep ).length )
-    if( creep_find_gardens( creep ).length )
+    // TODO: bayes theorem
+    if( Math.random() < 0.5 && creep_find_gardens( creep ).length )
     	creep_do('garden')( creep );
     // else if( job_count['build'] / _.sum( job_count ) < 0.5 && creep_find_constructions( creep ).length )
-    else if( Math.random() < 0.25 && creep_find_constructions( creep ).length )
+    else if( Math.random() < 0.25 )
     	creep_do('build')( creep );
-    else if( Math.random() < 0.1 && "id" in creep_find_ruin( creep ) )
+    else if( Math.random() < 0.1 && creep_find_ruin( creep ) )
     	creep_do('repair')( creep );
     else
     	creep_do('upgrade')( creep );
@@ -254,6 +256,8 @@ var creeping = iffer( is_creep_sick,
 // // TODO: place tower in general center of spawns, controllers, and resources
 // var towering = () => null;
 
+// var fortifying = () => null;
+
 // var extending = () => null;
 
 // var containing = () => null;
@@ -261,6 +265,7 @@ var creeping = iffer( is_creep_sick,
 // var constructing = room =>
 // {
 //     towering(); 
+//     fortifying(); 
 //     extending();
 //     containing();
 // };
