@@ -31,13 +31,13 @@ var birth = ( spawn, body ) =>
 	? spawn.createCreep( body, undefined, { cost: spawn_capacity() } )
 	: null;
 
-var nurture = spawn =>
+var nurturing = spawn =>
     _.each( _.filter( Game.creeps, creep => creep.ticksToLive < 500 ), creep => spawn.renewCreep( creep ) );
 
 var birthing = spawn => 
     !spawn.spawning && spawn.energy == spawn.energyCapacity
 	? birth( spawn, conceive() ) 
-	: nurture( spawn );
+	: null;
 
 // ================================
 
@@ -73,7 +73,7 @@ var is_structure_stable = isser( struct => ( struct.hits / struct.hitsMax ) < 0.
 
 var open_structure_filter = struct => 
     ( ( "energy" in struct && "energyCapacity" in struct && struct.energy < struct.energyCapacity ) 
-      || ( "store" in struct && "storeCapacity" in struct && struct.store < struct.storeCapacity ) ) 
+      || ( "store" in struct && "storeCapacity" in struct && _.sum( struct.store ) < struct.storeCapacity ) ) 
     && is_structure_type( [ STRUCTURE_SPAWN, STRUCTURE_EXTENSION, STRUCTURE_CONTAINER ] )( struct );
      
 var is_structure_open = isser( open_structure_filter );
@@ -95,7 +95,7 @@ var is_creep_full = creep =>
     _.sum( creep.carry ) == creep.carryCapacity;
 
 var is_creep_bored = creep =>
-    !creep.memory.job;
+    !creep.memory.dest || !creep.memory.job;
 
 var is_creep_building = creep =>
     !creep.memory.dest || is_construction_site( creep.memory.dest );
@@ -112,9 +112,14 @@ var is_creep_gardening = creep =>
 var creep_move_to = ( creep, verb, obj, subj ) =>
 {
     if( obj && "id" in obj )
+    {
 	creep.memory.dest = obj.id;
-    else
+
+    } else {
+
 	creep.say( "I'm lost!" );
+	creep_choose( creep );
+    }
 
     // TODO: check to make sure construction doesn't already exist
     if( creep.memory.x && creep.memory.y && Math.random() < 0.01 )
@@ -158,17 +163,17 @@ var creep_find_construction = creep =>
 var creep_find_ruin = creep =>
     is_structure( creep.memory.dest )
 	? Game.getObjectById( creep.memory.dest )
-	: creep.room.findClosestByRange( FIND_STRUCTURES, { filter: s => ( s.hits / s.hitsMax ) < 0.05 } );
+	: creep.pos.findClosestByRange( FIND_STRUCTURES, { filter: s => ( s.hits / s.hitsMax ) < 0.05 } );
 
 var creep_find_gardens = creep =>
-    creep.room.find( FIND_STRUCTURES, { filter: open_structure_filter( creep ) } );
+    creep.room.find( FIND_STRUCTURES, { filter: open_structure_filter } );
 
 var creep_find_garden = creep =>
 {
     var targets = creep_find_gardens( creep );
     return creep.memory.dest in targets.map( target => target.id )
 	? Game.getObjectById( creep.memory.dest )
-	: creep.pos.findClosestByRange( FIND_STRUCTURES, { filter: open_structure_filter( creep ) } );
+	: creep.pos.findClosestByRange( FIND_STRUCTURES, { filter: open_structure_filter } );
 };
 
 // ================================
@@ -209,25 +214,26 @@ var jobs = {
 
 var creep_do = job => creep =>
 {
+    // creep.say( job );
     creep.memory.job = job;
     jobs[ job ]( creep );
 };
 
 // TODO: ensure that recursive loops don't happen too much
 // TODO: decide based on parts, distance, and other screeps' jobs
-var creep_choose = creep => 
+function creep_choose( creep )
 {
     creep.memory.dest = null;
     var job_count = _.countBy( _.map( _.map( Game.creeps, "memory" ), "job" ) );
-    if( creep_find_gardens( creep ).length )
-	creep_do('garden')( creep );
+    if( job_count['build'] / _.sum( job_count ) < 0.5 && creep_find_gardens( creep ).length )
+    	creep_do('garden')( creep );
     else if( job_count['build'] / _.sum( job_count ) < 0.5 && creep_find_constructions( creep ).length )
-	creep_do('build')( creep );
-    else if( Math.random() < 0.5 )
-	creep_do('repair')( creep );
+    	creep_do('build')( creep );
+    else if( Math.random() < 0.05 && "id" in creep_find_ruin( creep ) )
+    	creep_do('repair')( creep );
     else
-	creep_do('upgrade')( creep );
-};
+    	creep_do('upgrade')( creep );
+}
 	
 var creep_continue = creep =>
     jobs[ creep.memory.job ]( creep );
@@ -266,8 +272,10 @@ module.exports.loop = () =>
     // BUG: we should do this on creeps per room
     if( _.values( Game.creeps ).length < MAX_CREEPS )
 	_.each( Game.spawns, birthing );
+    
+    _.each( Game.spawns, nurturing );
 
-    killing( creeps );
+    killing( Game.creeps );
 
     _.each( Game.creeps, creeping );
 
