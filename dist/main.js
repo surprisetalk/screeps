@@ -7,7 +7,7 @@ var choose = ls =>
 //===============================
 
 var is_source = id => 
-    id && Game.getObjectById( id ) && "_energy" in Game.getObjectById( id ) && !is_spawn( id );
+    id && Game.getObjectById( id ) && ( "_energy" in Game.getObjectById( id ) || "_store" in Game.getObjectById( id ) ) && !is_spawn( id );
 
 var is_structure = id =>
     id && Game.getObjectById( id ) && "structureType" in Game.getObjectById( id );
@@ -20,12 +20,12 @@ var is_controller = id =>
 
 // TODO: more construction sites
 var is_construction_site = id =>
-    id && Game.getObjectById( id ) && "structureType" in Game.getObjectById( id ) && "progress" in Game.getObjectById( id ) && ( Game.getObjectById( id ).structureType == STRUCTURE_EXTENSION || Game.getObjectById( id ).structureType == STRUCTURE_ROAD );
+    id && Game.getObjectById( id ) && "structureType" in Game.getObjectById( id ) && "progress" in Game.getObjectById( id ) && ( Game.getObjectById( id ).structureType == STRUCTURE_EXTENSION || Game.getObjectById( id ).structureType == STRUCTURE_ROAD || Game.getObjectById( id ).structureType == STRUCTURE_CONTAINER );
 
 //===============================
 
 var is_creep_old = creep =>
-    creep.ticksToLive <= 100;
+    creep.ticksToLive <= 150;
 
 var is_creep_carry_energy_empty = creep => 
     !creep.carry.energy;
@@ -39,7 +39,7 @@ var creep_room_find_spawn = creep =>
     creep.pos.findClosestByPath( FIND_STRUCTURES, { filter: structure => structure.structureType == STRUCTURE_SPAWN } );
 
 var creep_room_find_structures_under_capacity = creep =>
-    creep.room.find( FIND_STRUCTURES, { filter: structure => ( ( structure.structureType == STRUCTURE_EXTENSION || structure.structureType == STRUCTURE_SPAWN ) && structure.energy < structure.energyCapacity ) } );
+    creep.room.find( FIND_STRUCTURES, { filter: structure => ( ( structure.structureType == STRUCTURE_EXTENSION || structure.structureType == STRUCTURE_SPAWN || structure.structureType == STRUCTURE_CONTAINER ) && ( ( "energy" in structure && structure.energy < structure.energyCapacity ) || ( "store" in structure && _.sum( structure.store ) < structure.storeCapacity ) ) ) } );
 
 //===============================
 
@@ -50,6 +50,13 @@ var creep_move_to = ( creep, verb, obj, subj ) =>
     else
 	creep.say( "I'm lost!" );
 	// creep.memory.dest = choose( _.values( Game.creeps ) ).memory.dest;
+
+    // TODO: check to make sure construction doesn't already exist
+    if( creep.memory.x && creep.memory.y && Math.random() < 0.01 )
+	creep.room.createConstructionSite( creep.memory.x, creep.memory.y, STRUCTURE_ROAD );
+
+    creep.memory.x = creep.pos.x;
+    creep.memory.y = creep.pos.y;
     
     return creep[ verb ]( obj, subj ) == ERR_NOT_IN_RANGE
     	? creep.moveTo( obj )
@@ -80,13 +87,7 @@ var creep_move_to_spawn = creep =>
 
 var creep_move_to_resources = creep =>
 {
-    // TODO: check to make sure construction doesn't already exist
-    if( creep.memory.x && creep.memory.y && Math.random() < 0.01 )
-	creep.room.createConstructionSite( creep.memory.x, creep.memory.y, STRUCTURE_ROAD );
-
-    creep.memory.x = creep.pos.x;
-    creep.memory.y = creep.pos.y;
-
+    // TODO: containers need to count as sources too...
     var source = is_source( creep.memory.dest )
 	? Game.getObjectById( creep.memory.dest )
 	: Math.random() < 0.05
@@ -105,12 +106,24 @@ var creep_build = creep =>
     var extensions = creep.room.find( FIND_CONSTRUCTION_SITES, { filter: s => s.structureType == STRUCTURE_EXTENSION } );
     var site = is_construction_site( creep.memory.dest )
 	? Game.getObjectById( creep.memory.dest )
-	: extensions.length && Math.random() > 0.5
+	: extensions.length && Math.random() < 0.5
 	    ? choose( extensions )
 	    : creep.pos.findClosestByRange( FIND_CONSTRUCTION_SITES );
     
     if( site && "id" in site )
 	creep_move_to( creep, "build", site );
+    else
+	creep_repair( creep );
+};
+
+var creep_repair = creep =>
+{ 
+    var site = is_structure( creep.memory.dest )
+	? Game.getObjectById( creep.memory.dest )
+	: creep.room.findClosestByRange( FIND_STRUCTURES, { filter: s => ( s.hits / s.hitsMax ) < 0.05 } );
+    
+    if( site && "id" in site )
+	creep_move_to( creep, "repair", site );
     else
 	creep_upgrade_controller( creep );
 };
@@ -128,8 +141,10 @@ var creep_continue = creep =>
 	    creep_build( creep );
 	else if( is_spawn( creep.memory.dest ) )
 	    creep_move_to_spawn( creep );
+	else if( is_creep_carry_energy_empty( creep ) )
+	    creep_move_to_resources( creep );
 	else
-	    ;
+	    creep_transfer( creep );
     else
 	// TODO: if empty, etc
 	creep_move_to_resources( creep );
@@ -144,10 +159,11 @@ var creeper = ( parts, run ) =>
     run: run
 });
 
+// TODO: generate new creep parts completely at random based on energy max
 // TODO: get rid of roles and decide actions based on priority & parts
 var roles = {
     harvester: creeper( 
-	[ WORK, CARRY, CARRY, MOVE, MOVE ],
+	[ WORK, WORK, WORK, CARRY, CARRY, MOVE, MOVE ],
 	creep => is_creep_old( creep )
 	    ? creep_move_to_spawn( creep )
 	    : is_creep_carry_energy_empty( creep )
@@ -157,7 +173,7 @@ var roles = {
 		    : creep_continue( creep )
     ),
     builder: creeper( 
-    	[ WORK, WORK, CARRY, MOVE ],
+    	[ WORK, WORK, WORK, WORK, CARRY, MOVE ],
 	creep => is_creep_old( creep )
 	    ? creep_move_to_spawn( creep )
 	    : is_creep_carry_energy_empty( creep )
@@ -167,7 +183,7 @@ var roles = {
 		    : creep_continue( creep )
     ),
     updater: creeper( 
-	[ WORK, WORK, CARRY, MOVE ],
+	[ WORK, WORK, CARRY, CARRY, CARRY, MOVE, MOVE, MOVE ],
 	creep => is_creep_old( creep )
 	    ? creep_move_to_spawn( creep )
 	    : is_creep_carry_energy_empty( creep )
@@ -181,26 +197,55 @@ var roles = {
 
 //==================================
 
+var spawn_capacity = () => 800;
+
 var memory = () =>
     _.each( Memory.creeps, ( creep, name ) => !( name in Game.creeps ) ? delete Game.creeps[ name ] : null );
 
-var renewy = ( spawn, creeps ) =>
-    _.each( _.filter( creeps, creep => creep.ticksToLive < 100 ), creep => spawn.renewCreep( creep ) );
+var renewy = creeps => spawn =>
+    _.each( _.filter( creeps, creep => creep.ticksToLive < 500 ), creep => spawn.renewCreep( creep ) );
+
+var suicidey = creeps =>
+{
+    var craps = _.filter( creeps, creep => !( "cost" in creep.memory && creep.memory.cost >= spawn_capacity() ) );
+    if( _.values( Game.creeps ).length > 18 && craps.length )
+    	choose( craps ).suicide();
+};
 
 var creepier = ( spawn, creeps ) =>
 {
     var role_histogram = _.defaults( _.countBy( creeps, creep => creep.memory.role ), _.mapValues( roles, () => 0 ) );
     var role_name = _.reduce( role_histogram, ( min, val, key ) => val < min.val ? { key: key, val: val } : min, { key: null, val: Infinity } ).key;
     var role = roles[ role_name ];
-    if( spawn.canCreateCreep( role.parts ) == OK )
-	spawn.createCreep( role.parts, undefined, { role: role_name } );
+
+    // var parts = {
+    // 	move: 50,
+    // 	work: 100,
+    // 	carry: 50
+    // };
+    
+    // KLUDGE
+    var creep_body_random = spend =>
+	spend < 50
+	    ? []
+	    : spend >= 100 && Math.random() < 0.333
+		? [ "work" ].concat( creep_body_random( spend - 100 ) )
+		: [ Math.random() < 0.5 ? "move" : "carry" ].concat( creep_body_random( spend - 50 ) );
+
+    var body = [ "move", "work", "carry" ].concat( creep_body_random( spawn_capacity() - 200 ) );
+    
+    if( spawn.canCreateCreep( body ) == OK )
+    	spawn.createCreep( body, undefined, { role: role_name, cost: spawn_capacity() } );
 };
 
 var should_create_creep = spawn =>
-    _.values( Game.creeps ).length < 18 && ( Game.cpu.bucket / Game.cpu.limit ) > 0.5 && !spawn.spawning && spawn.energy >= spawn.energyCapacity;
+	_.values( Game.creeps ).length < 21 
+	&& !spawn.spawning && spawn.energy == spawn.energyCapacity;
+	// TODO: check all extensions
+	// && _.filter( Game.creeps, creep => "cost" in creep.memory && creep.memory.cost == spawn.energyCapacity ).length;
 
 var spawny = ( spawns, creeps ) =>
-    _.each( spawns, spawn => should_create_creep( spawn ) ? creepier( spawn, creeps ) : renewy( spawn, creeps ) );
+    _.each( spawns, spawn => should_create_creep( spawn ) ? creepier( spawn, creeps ) : null );
 
 var creepy = creeps =>
     _.each( creeps, creep => creep.memory.role in roles ? roles[ creep.memory.role ].run( creep ) : null );
@@ -208,16 +253,46 @@ var creepy = creeps =>
 
 var extensionier = room => 
 {
-    if( !room.find( FIND_CONSTRUCTION_SITES, { filter: structure => structure.structureType == STRUCTURE_EXTENSION } ).length && room.find( FIND_STRUCTURES, { filter: s => s.structureType == STRUCTURE_EXTENSION } ).length <= 5 )
+    if( !room.find( FIND_CONSTRUCTION_SITES, { filter: structure => structure.structureType == STRUCTURE_EXTENSION } ).length && room.find( FIND_STRUCTURES, { filter: s => s.structureType == STRUCTURE_EXTENSION } ).length <= 10 )
     {
     	var source = choose( room.find( FIND_SOURCES ) );
-	room.createConstructionSite( parseInt( Math.random() * 10 + source.pos.x ), parseInt( Math.random() * 10 + source.pos.y ), STRUCTURE_EXTENSION );
+	room.createConstructionSite( 
+	    Math.floor( Math.random() * 10 - 5 + source.pos.x ), 
+	    Math.floor( Math.random() * 10 - 5 + source.pos.y ), 
+	    STRUCTURE_EXTENSION );
     }
+};
+
+var containier = ( room, thing ) =>
+{
+    var source = thing.pos.findClosestByPath( FIND_SOURCES );
+    var x_dist = Math.abs( source.pos.x - thing.pos.x );
+    var y_dist = Math.abs( source.pos.y - thing.pos.y );
+    if( Math.sqrt( ( x_dist * x_dist ) + ( y_dist * y_dist ) ) >= 15 )
+    {
+	var x = ( source.pos.x + thing.pos.x ) / 2;
+	var y = ( source.pos.y + thing.pos.y ) / 2;
+	var x_hit = x_dist / 4;
+	var y_hit = x_dist / 4;
+	for( var i in _.range(25) )
+	    if( room.createConstructionSite( 
+		Math.floor( x + ( Math.random() * x_hit ) - ( x_hit / 2 ) ), 
+		Math.floor( y + ( Math.random() * y_hit ) - ( y_hit / 2 ) ), 
+		STRUCTURE_CONTAINER ) == OK )
+		    break;
+    }
+};
+
+var containey = room =>
+{
+    if( !( room.find( FIND_CONSTRUCTION_SITES, { filter: s => s.structureType == STRUCTURE_CONTAINER } ).length + room.find( FIND_STRUCTURES, { filter: s => s.structureType == STRUCTURE_CONTAINER } ).length ) )
+	_.each( [ room.controller ].concat( room.find( FIND_MY_SPAWNS ) ), thing => containier( room, thing ) );
 };
 
 var constructy = ( spawns, creeps ) =>
 {
     _.map( spawns, "room" ).map( extensionier );
+    _.map( Game.rooms, containey );
 };
 
 
@@ -226,8 +301,9 @@ var constructy = ( spawns, creeps ) =>
 module.exports.loop = () =>
 {
     memory();
+    suicidey( Game.creeps );
     spawny( Game.spawns, Game.creeps );
     creepy( Game.creeps );
+    _.map( Game.spawns, renewy( Game.creeps ) );
     constructy( Game.spawns, Game.creeps );
-    // TODO: suicidey( Game.creeps );
 };
