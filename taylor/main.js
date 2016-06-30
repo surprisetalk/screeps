@@ -4,12 +4,66 @@ var MAX_CREEPS = 21;
 
 // ================================
 
-// TODO: spawn (300) + n * extensions (50)
-var spawn_capacity = () => 800;
+var isser = predicate => id =>
+    id && Game.getObjectById( id ) && predicate( Game.getObjectById( id ) );
+
+var is_thing = looks => 
+    isser( struct => _.some( looks, look => "room" in struct && struct.room.lookForAt( look, struct ).length ) );
+
+var is_source = is_thing( [ LOOK_SOURCES ] );
+var is_construction_site = is_thing( [ LOOK_CONSTRUCTION_SITES ] );
+
+var is_structure_type = types => structure =>
+    "structureType" in structure && _.includes( types, structure.structureType );
+
+var is_structure = isser( struct => "structureType" in struct );
+var is_spawn = isser( is_structure_type( [ STRUCTURE_SPAWN ] ) );
+
+var is_ruin = isser( struct => ( struct.hits / struct.hitsMax ) < 0.1 );
+var is_structure_stable = isser( struct => ( struct.hits / struct.hitsMax ) < 0.85 );
+
+var open_restaurant_filter = struct =>
+    "store" in struct && struct.store[ RESOURCE_ENERGY ] && is_structure_type( [ STRUCTURE_CONTAINER, STRUCTURE_STORAGE ] )( struct );
+var is_structure_restaurant_open = isser( open_restaurant_filter );
+
+var open_structure_filter = struct => 
+    ( ( "energy" in struct && "energyCapacity" in struct && struct.energy < struct.energyCapacity ) 
+      || ( "store" in struct && "storeCapacity" in struct && _.sum( struct.store ) < struct.storeCapacity ) ) 
+    && is_structure_type( [ STRUCTURE_SPAWN, STRUCTURE_EXTENSION, STRUCTURE_CONTAINER, STRUCTURE_STORAGE ] )( struct );
+var is_structure_open = isser( open_structure_filter );
 
 // ================================
 
-var memorizing = ( creep, name ) =>
+var spawn_capacity = room =>
+	( 300 * room.memory.n_spawns ) + ( EXTENSION_ENERGY_CAPACITY[ room.controller.level ] * room.memory.n_extensions );
+
+// ================================
+
+var memorize = room => ( levels, alias ) =>
+{
+    var name = "n_" + alias + "s";
+    if( !( name in room.memory ) || Math.random() < 0.05 || room.memory[ name ] < CONTROLLER_STRUCTURES[ alias ][ room.controller.level ] )
+    	room.memory[ name ] = room.find( FIND_MY_STRUCTURES, { filter: is_structure_type( [ alias ] ) } ).length 
+	    + room.find( FIND_MY_CONSTRUCTION_SITES, { filter: is_structure_type( [ alias ] ) } ).length;
+};
+
+var n_jobs = room =>
+    _.countBy( _.map( _.map( room.find( FIND_MY_CREEPS ), "memory" ), "job" ) );
+
+var memorizing = room =>
+{
+    _.each( CONTROLLER_STRUCTURES, memorize( room ) );
+    room.memory.n_creeps = room.find( FIND_MY_CREEPS ).length;
+    room.memory.n_constructions = room.find( FIND_MY_CONSTRUCTION_SITES ).length;
+    room.memory.n_ruins = room.find( FIND_MY_STRUCTURES, { filter: s => ( s.hits / s.hitsMax ) < 0.05 } ).length;
+    room.memory.n_gardens = room.find( FIND_MY_STRUCTURES, { filter: open_structure_filter } ).length;
+    room.memory.n_restaurants = room.find( FIND_MY_STRUCTURES, { filter: open_restaurant_filter } ).length;
+    room.memory.n_jobs = n_jobs( room );
+};
+
+// ================================
+
+var forgetting = ( creep, name ) =>
     !( name in Game.creeps ) 
 	? delete Game.creeps[ name ] 
 	: null;
@@ -23,21 +77,26 @@ var recombinate = spend =>
 	    ? [ "work" ].concat( recombinate( spend - 100 ) )
 	    : [ Math.random() < 0.5 ? "move" : "carry" ].concat( recombinate( spend - 50 ) );
 
-var conceive = () =>
-    [ "move", "work", "carry" ].concat( recombinate( spawn_capacity() - 200 ) );
+var conceive = room =>
+    [ "move", "work", "carry" ].concat( recombinate( spawn_capacity( room ) - 200 ) );
 
 var birth = ( spawn, body ) =>
     spawn.canCreateCreep( body ) == OK 
-	? spawn.createCreep( body, undefined, { cost: spawn_capacity() } )
+	? spawn.createCreep( body, undefined, { cost: spawn_capacity( spawn.room ) } )
+	: null;
+
+var contraction = spawn =>
+    !spawn.spawning && spawn.energy == spawn.energyCapacity
+    	? birth( spawn, conceive( spawn.room ) ) 
+    	: null;
+
+var birthing = room => 
+    room.memory.n_creeps < MAX_CREEPS
+	? _.each( room.find( FIND_MY_SPAWNS ), contraction ) 
 	: null;
 
 var nurturing = spawn =>
-    _.each( _.filter( Game.creeps, creep => creep.ticksToLive < 500 ), creep => spawn.renewCreep( creep ) );
-
-var birthing = spawn => 
-    !spawn.spawning && spawn.energy == spawn.energyCapacity
-	? birth( spawn, conceive() ) 
-	: null;
+    _.each( _.filter( Game.creeps, creep => creep.ticksToLive < 500 && spawn.pos.isNearTo( creep ) ), creep => spawn.renewCreep( creep ) );
 
 // ================================
 
@@ -47,46 +106,24 @@ var snipe = ( creeps, craps ) =>
 	: null;
 
 var is_creep_pleb = creep =>
-    !( "cost" in creep.memory && creep.memory.cost >= spawn_capacity() );
+    !( "cost" in creep.memory && creep.memory.cost >= spawn_capacity( creep.room ) );
 
 var killing = creeps =>
     snipe( creeps, _.filter( creeps, is_creep_pleb ) );
 
 // ================================
 
-var isser = predicate => id =>
-    id && Game.getObjectById( id ) && predicate( Game.getObjectById( id ) );
-
-var is_structure_type = types => structure =>
-    "structureType" in structure && _.includes( types, structure.structureType );
-
-var is_source = isser( source => "ticksToRegeneration" in source );
-
-var is_spawn = isser( is_structure_type( [ STRUCTURE_SPAWN ] ) );
-
-var is_structure = isser( struct => "structureType" in struct );
-
-// TODO: more construction sites
-var is_construction_site = isser( struct => "progress" in struct && !is_structure_type( [ STRUCTURE_CONTROLLER ] )( struct ) );
-
-var is_structure_stable = isser( struct => ( struct.hits / struct.hitsMax ) < 0.85 );
-
-var open_structure_filter = struct => 
-    ( ( "energy" in struct && "energyCapacity" in struct && struct.energy < struct.energyCapacity ) 
-      || ( "store" in struct && "storeCapacity" in struct && _.sum( struct.store ) < struct.storeCapacity ) ) 
-    && is_structure_type( [ STRUCTURE_SPAWN, STRUCTURE_EXTENSION, STRUCTURE_CONTAINER ] )( struct );
-     
-var is_structure_open = isser( open_structure_filter );
-
-// ================================
-
-// TODO: hit points
-var is_creep_sick = creep => 
+var is_creep_old = creep => 
     creep.ticksToLive <= 150;
 
-// TODO: hit points
-var is_creep_well = creep => 
-    creep.ticksToLive >= 1000;
+var is_creep_young = creep => 
+    creep.ticksToLive >= 1350;
+
+var is_creep_hurt = creep =>
+    ( creep.hits / creep.hitsMax ) < 0.25;
+
+var is_creep_well = creep =>
+    ( creep.hits / creep.hitsMax ) < 0.9;
 
 var is_creep_hungry = creep => 
     !creep.carry.energy;
@@ -108,21 +145,14 @@ var is_creep_gardening = creep =>
 
 // ================================
 
-// TODO: this is ugly
 var creep_move_to = ( creep, verb, obj, subj ) =>
 {
     if( obj && "id" in obj )
-    {
 	creep.memory.dest = obj.id;
-
-    } else {
-
-	creep.say( "I'm lost!" );
+    else
 	creep_choose( creep );
-    }
 
-    // TODO: check to make sure construction doesn't already exist
-    if( creep.memory.x && creep.memory.y && Math.random() < 0.01 )
+    if( creep.memory.x && creep.memory.y && Math.random() < 0.1 )
 	creep.room.createConstructionSite( creep.memory.x, creep.memory.y, STRUCTURE_ROAD );
 
     creep.memory.x = creep.pos.x;
@@ -138,43 +168,43 @@ var creep_move_to = ( creep, verb, obj, subj ) =>
 var creep_find_spawn = creep =>
     is_spawn( creep.memory.dest )
 	? Game.getObjectById( creep.memory.dest )
-	: creep.pos.findClosestByRange( FIND_STRUCTURES, { filter: is_structure_type( [ STRUCTURE_SPAWN ] ) } );
+	: creep.pos.findClosestByRange( FIND_MY_SPAWNS );
 
-// TODO: find closest open container, else source
 var creep_find_source = creep =>
     is_source( creep.memory.dest )
 	? Game.getObjectById( creep.memory.dest )
 	: Math.random() < 0.05
+	    // TODO: FIND_SOURCES_ACTIVE
 	    ? _.sample( creep.room.find( FIND_SOURCES ) )
 	    : creep.pos.findClosestByRange( FIND_SOURCES );
 
-var creep_find_constructions = creep => 
-    creep.room.find( FIND_CONSTRUCTION_SITES, { filter: is_structure_type( [ STRUCTURE_EXTENSION ] ) } );
+var creep_find_extensions = creep => 
+    creep.room.find( FIND_MY_CONSTRUCTION_SITES, { filter: is_structure_type( [ STRUCTURE_EXTENSION ] ) } );
 
 var creep_find_construction = creep =>
 {
-    var extensions = creep_find_constructions( creep );
+    var extensions = creep_find_extensions( creep );
     return is_construction_site( creep.memory.dest )
     	? Game.getObjectById( creep.memory.dest )
     	: extensions.length && Math.random() < 0.25
     	    ? _.sample( extensions )
-    	    : creep.pos.findClosestByRange( FIND_CONSTRUCTION_SITES );
+    	    : creep.pos.findClosestByRange( FIND_MY_CONSTRUCTION_SITES );
 };
 
 var creep_find_ruin = creep =>
-    is_structure( creep.memory.dest )
+    is_ruin( creep.memory.dest )
 	? Game.getObjectById( creep.memory.dest )
-	: creep.pos.findClosestByRange( FIND_STRUCTURES, { filter: s => ( s.hits / s.hitsMax ) < 0.05 } );
+	: creep.pos.findClosestByRange( FIND_MY_STRUCTURES, { filter: s => ( s.hits / s.hitsMax ) < 0.1 } );
 
 var creep_find_gardens = creep =>
-    creep.room.find( FIND_STRUCTURES, { filter: open_structure_filter } );
+    creep.room.find( FIND_MY_STRUCTURES, { filter: open_structure_filter } );
 
 var creep_find_garden = creep =>
 {
     var targets = creep_find_gardens( creep );
     return creep.memory.dest in targets.map( target => target.id )
 	? Game.getObjectById( creep.memory.dest )
-	: creep.pos.findClosestByRange( FIND_STRUCTURES, { filter: open_structure_filter } );
+	: creep.pos.findClosestByRange( FIND_MY_STRUCTURES, { filter: open_structure_filter } );
 };
 
 // ================================
@@ -203,10 +233,11 @@ var iffer = ( i, t, e ) => s => i( s ) ? t( s ) : e( s );
 
 // BUG: we are checking whether they are ___ before they choose a dest
 // TODO: a lot of these jobs duplicate dest checks in the conditional
+// TODO: create a mining job for transferring to container
 var jobs = {
     // TODO: include containers
     snack: iffer( is_creep_full, creep_choose, creep_go_to_source ),
-    play: iffer( is_creep_well, creep_choose, creep_go_to_spawn ),
+    play: iffer( is_creep_young, creep_choose, creep_go_to_spawn ),
     upgrade: creep_go_to_controller,
     build: iffer( is_creep_building, creep_go_to_construction, creep_choose ),
     repair: iffer( is_creep_repairing, creep_go_to_repair, creep_choose ),
@@ -225,16 +256,16 @@ var creep_do = job => creep =>
 function creep_choose( creep )
 {
     creep.memory.dest = null;
-    var job_count = _.countBy( _.map( _.map( Game.creeps, "memory" ), "job" ) );
-    // if( job_count['garden'] / _.sum( job_count ) < 0.5 && creep_find_gardens( creep ).length )
-    // TODO: bayes theorem
-    if( Math.random() < 0.5 && creep_find_gardens( creep ).length )
+
+    var mem = creep.room.memory;
+    var n_j = n_jobs( creep.room );
+
+    if( mem.n_gardens && n_j.garden < ( mem.n_creeps / 2 ) )
     	creep_do('garden')( creep );
-    // else if( job_count['build'] / _.sum( job_count ) < 0.5 && creep_find_constructions( creep ).length )
-    else if( Math.random() < 0.25 )
+    else if( mem.n_constructions && Math.random() < 0.9 )
     	creep_do('build')( creep );
-    else if( Math.random() < 0.1 && creep_find_ruin( creep ) )
-    	creep_do('repair')( creep );
+    else if( mem.n_ruins && Math.random() < 0.25 )
+	creep_do('repair')( creep );
     else
     	creep_do('upgrade')( creep );
 }
@@ -243,7 +274,7 @@ var creep_continue = creep =>
     jobs[ creep.memory.job ]( creep );
 
 // TODO: is_creep_danger
-var creeping = iffer( is_creep_sick,
+var creeping = iffer( is_creep_old,
 		      creep_do('play'),
 		      iffer( is_creep_hungry,
 			     creep_do('snack'),
@@ -253,38 +284,75 @@ var creeping = iffer( is_creep_sick,
 
 // ================================
 
-// // TODO: place tower in general center of spawns, controllers, and resources
-// var towering = () => null;
+var find_important_things = room =>
+    room.find( FIND_MY_SPAWNS )
+	.concat( room.find( FIND_SOURCES ) )
+	.concat( room.find( FIND_MY_STRUCTURES, { filter: is_structure_type( [ STRUCTURE_CONTROLLER, STRUCTURE_STORAGE ] ) } ) );
+
+var mean = N =>
+    _.sum( N ) / N.length;
+
+var approx_mean = N =>
+    _.sum( N ) / N.length * _.random( 0.75, 1.25 );
+
+var midpoint = poses => 
+({ 
+    x: _.round( approx_mean( _.map( poses, "x" ) ) ),
+    y: _.round( approx_mean( _.map( poses, "y" ) ) )
+});
+
+var construct_tower = room => pos => 
+    room.createConstructionSite( pos.x, pos.y, STRUCTURE_TOWER ) != OK
+	? console.log( "could not construct tower" )
+	: null;
+var towering = room => 
+    room.memory.n_towers < CONTROLLER_STRUCTURES['tower'][ room.controller.level ]
+	? construct_tower( room )( midpoint( _.map( find_important_things( room ), "pos" ) ) )
+	: null;
 
 // var fortifying = () => null;
 
-// var extending = () => null;
+var pos_approx_radius = ( radius, entropy ) => pos =>
+    _.mapValues( pos, n => _.isNumber( n ) ? _.round( n + _.random( radius - entropy, radius + entropy ) * Math.pow( -1, _.random( 1, 2 ) ) ) : null );
+var construct_extension = room => pos =>
+    room.createConstructionSite( pos.x, pos.y, STRUCTURE_EXTENSION ) != OK
+	? console.log( "could not construct extension" )
+	: null;
+var find_prospective_extensions = room =>
+    _.map( _.map( room.find( FIND_SOURCES ), "pos" ), pos_approx_radius( 4, 1 ) );
+var extending = room => 
+    room.memory.n_extensions < CONTROLLER_STRUCTURES['extension'][ room.controller.level ]
+	? _.map( find_prospective_extensions( room ), construct_extension( room ) )
+	: null;
 
+// TODO: put the storage between the farthest spawn/controller and closest resource
+// var storing = () => null; 
+
+// TODO: if maxed out storages, place containers midway between nearest restaurant, if no nearby restaurants?
 // var containing = () => null;
 
-// var constructing = room =>
-// {
-//     towering(); 
-//     fortifying(); 
-//     extending();
-//     containing();
-// };
+var constructing = room =>
+{
+    towering( room ); 
+    // fortifying(); 
+    extending( room );
+    // storing();
+    // containing();
+};
 
 // ================================
 
 module.exports.loop = () => 
 {
-    _.each( Memory.creeps, memorizing );
-
-    // BUG: we should do this on creeps per room
-    if( _.values( Game.creeps ).length < MAX_CREEPS )
-	_.each( Game.spawns, birthing );
-    
+    // MAIN
+    _.each( Memory.creeps, forgetting );
+    _.each( Game.rooms, memorizing );
+    _.each( Game.rooms, birthing );
     _.each( Game.spawns, nurturing );
-
     killing( Game.creeps );
-
     _.each( Game.creeps, creeping );
-
-    // _.each( Game.rooms, constructing );
+    _.each( Game.rooms, constructing );
+    
+    // TESTS
+    // TODO: are creeps okay?
 };
